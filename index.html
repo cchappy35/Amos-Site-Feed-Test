@@ -3,17 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Morgan Amos — Live Listings & Reviews</title>
+<title>Morgan Amos — Listings &amp; Reviews</title>
+<meta name="description" content="Active, pending, and closed listings plus client reviews for Morgan Amos, Kennon &amp; Parker, Columbus GA." />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body {
-    background: #f7f4ef; color: #1d1a16;
-    font-family: 'Work Sans', system-ui, sans-serif;
-    padding: 52px 48px 80px;
-  }
+  body { background: #f7f4ef; color: #1d1a16; font-family: 'Work Sans', system-ui, sans-serif; padding: 52px 48px 80px; }
   a { color: #1d1a16; text-decoration: none; }
   a:hover { color: oklch(0.52 0.11 42); }
   .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
@@ -28,29 +25,15 @@
   .dot { width:8px; height:8px; border-radius:50%; background:oklch(.72 .15 68); animation:pulse 2.4s ease-in-out infinite; }
   .dot.ok { background:oklch(.6 .13 145); }
   .dot.bad { background:oklch(.58 .17 25); }
-  button.refresh {
-    font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+  button.refresh { font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
     padding:10px 16px; border:1px solid #cdc4b7; border-radius:999px; background:transparent; color:#1d1a16;
-    cursor:pointer; transition:background .15s,color .15s;
-  }
+    cursor:pointer; transition:background .15s,color .15s; }
   button.refresh:hover { background:#1d1a16; border-color:#1d1a16; color:#f7f4ef; }
 
-  #diag { margin-top:22px; border:1px solid #e6ded2; background:#fffdfa; border-radius:4px; padding:16px 18px; font-size:11.5px; color:#55504a; display:none; }
-  #diag.show { display:block; }
-  #diag table { width:100%; border-collapse:collapse; }
-  #diag td { padding:5px 8px 5px 0; vertical-align:top; }
-  #diag td:first-child { text-transform:uppercase; letter-spacing:.08em; color:#8b8074; width:90px; }
-  .tag { display:inline-block; padding:2px 7px; border-radius:2px; font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
-  .tag.live { background:oklch(.46 .09 152); color:#f2f7f2; }
-  .tag.cache { background:oklch(.72 .15 68); color:#231a08; }
-  .tag.err { background:oklch(.58 .17 25); color:#fff3f0; }
-
-  nav { display:flex; gap:4px; margin-top:30px; border-bottom:1px solid #ddd6cb; flex-wrap:wrap; }
-  nav button {
-    display:flex; align-items:baseline; gap:8px; background:transparent; border:0;
+  nav { display:flex; gap:4px; margin-top:34px; border-bottom:1px solid #ddd6cb; flex-wrap:wrap; }
+  nav button { display:flex; align-items:baseline; gap:8px; background:transparent; border:0;
     border-bottom:2px solid transparent; padding:12px 18px 14px; margin-bottom:-1px; cursor:pointer;
-    font-family:'Work Sans',sans-serif; font-size:15px; font-weight:500; color:#8b8074; transition:color .15s;
-  }
+    font-family:'Work Sans',sans-serif; font-size:15px; font-weight:500; color:#8b8074; transition:color .15s; }
   nav button[aria-selected="true"] { color:#1d1a16; border-bottom-color:#1d1a16; }
   nav button .n { font-family:'JetBrains Mono',monospace; font-size:11px; color:#a09689; }
 
@@ -95,53 +78,35 @@
   </div>
 </header>
 
-<div id="diag"><table id="diagTable"></table></div>
-
 <nav id="tabs"></nav>
 <div id="content"></div>
 
 <footer>
-  <span id="sourceLine">Relayed through /api/feed</span>
+  <span>Live from kpdd.com/agents/morganamos</span>
   <span>Auto-refresh · every 10 min</span>
 </footer>
 
 <script>
+// kpdd.com sends Access-Control-Allow-Origin, so these are fetched directly in the
+// browser. No proxy, no server function, nothing to deploy but this file.
+const BASE = 'https://kpdd.com/agents/morganamos/';
 const FEEDS = [
-  { key:'active',  label:'Active',   badge:'For sale',       bg:'rgba(247,244,239,.94)', fg:'#3b352d' },
-  { key:'pending', label:'Pending',  badge:'Under contract', bg:'oklch(.68 .14 72)',     fg:'#231a08' },
-  { key:'closed',  label:'Closed',   badge:'Sold',           bg:'oklch(.46 .09 152)',    fg:'#f2f7f2' },
-  { key:'reviews', label:'Reviews',  badge:'',               bg:'',                      fg:'' }
+  { key:'active',  file:'active.rss',  label:'Active',  badge:'For sale',       bg:'rgba(247,244,239,.94)', fg:'#3b352d', empty:'No active listings right now.' },
+  { key:'pending', file:'pending.rss', label:'Pending', badge:'Under contract', bg:'oklch(.68 .14 72)',     fg:'#231a08', empty:'Nothing under contract right now.' },
+  { key:'closed',  file:'closed.rss',  label:'Closed',  badge:'Sold',           bg:'oklch(.46 .09 152)',    fg:'#f2f7f2', empty:'No closed sales listed yet.' },
+  { key:'reviews', file:'reviews.rss', label:'Reviews', badge:'',               bg:'',                      fg:'',        empty:'No reviews yet.' }
 ];
 
+const data = {};
+const failed = new Set();
 let tab = 'active';
-const data = {};   // key -> items
-const meta = {};   // key -> { source, warning, status, error }
+let loaded = false;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-async function loadFeed(key) {
-  try {
-    const res = await fetch('/api/feed?feed=' + key + '&_t=' + Date.now());
-    const source = res.headers.get('x-feed-source') || '';
-    const warning = res.headers.get('x-feed-warning') || '';
-    if (!res.ok) {
-      let body = {};
-      try { body = await res.json(); } catch (e) {}
-      meta[key] = { source:'error', error: body.error || ('HTTP ' + res.status), hint: body.hint || '' };
-      data[key] = [];
-      return;
-    }
-    const items = parse(await res.text());
-    meta[key] = { source, warning, age: res.headers.get('x-feed-age') };
-    data[key] = items || [];
-  } catch (e) {
-    meta[key] = { source:'error', error: e.message };
-    data[key] = [];
-  }
-}
-
 function parse(text) {
+  if (!/^\s*(<\?xml|<rss)/i.test(text)) return null;
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.querySelector('parsererror')) return null;
   const pick = (el, tag) => { const n = el.getElementsByTagName(tag)[0]; return n ? n.textContent.trim() : ''; };
@@ -172,7 +137,7 @@ function ago(d) {
 function renderTabs() {
   $('#tabs').innerHTML = FEEDS.map(f =>
     '<button role="tab" aria-selected="' + (f.key === tab) + '" data-key="' + f.key + '">' +
-    f.label + '<span class="n">' + ((data[f.key] || []).length || 0) + '</span></button>'
+    f.label + '<span class="n">' + ((data[f.key] || []).length) + '</span></button>'
   ).join('');
   $('#tabs').querySelectorAll('button').forEach(b =>
     b.addEventListener('click', () => { tab = b.dataset.key; renderTabs(); renderBody(); }));
@@ -181,18 +146,16 @@ function renderTabs() {
 function renderBody() {
   const f = FEEDS.find(x => x.key === tab);
   const rows = data[tab] || [];
-  const m = meta[tab] || {};
 
   if (!rows.length) {
-    $('#content').innerHTML = '<div class="empty">' +
-      (m.source === 'error'
-        ? 'Feed unavailable — ' + esc(m.error) + (m.hint ? '<br><br>' + esc(m.hint) : '')
-        : 'Nothing in this feed right now.') + '</div>';
+    $('#content').innerHTML = loaded
+      ? '<div class="empty">' + (failed.has(tab) ? 'This feed could not be reached.' : esc(f.empty)) + '</div>'
+      : '';
     return;
   }
 
   if (tab === 'reviews') {
-    const cards = rows.map(r => {
+    $('#content').innerHTML = '<div class="reviews">' + rows.map(r => {
       const stars = (r.title.match(/★/g) || []).length || 5;
       const who = r.author || r.title.replace(/^[★\s]*review from\s*/i, '');
       let body = (r.text || '').replace(/\s*\n+\s*/g, ' ').trim();
@@ -201,15 +164,14 @@ function renderBody() {
         '<blockquote>' + esc(body) + '</blockquote>' +
         '<figcaption><span class="who">' + esc(who) + '</span>' +
         '<span class="date">' + fmt(parseDate(r.date)) + '</span></figcaption></figure>';
-    }).join('');
-    $('#content').innerHTML = '<div class="reviews">' + cards + '</div>';
+    }).join('') + '</div>';
     return;
   }
 
-  const cards = rows.map(r => {
+  $('#content').innerHTML = '<div class="grid">' + rows.map(r => {
     const d = parseDate(r.date);
     const price = (r.title.match(/\$[\d,]+/) || [''])[0] || 'Price on request';
-    const addr = r.title.replace(/\s*[—–]\s*\$.*$/, '').trim();
+    const addr = r.title.replace(/\s*[—–-]\s*\$[\d,]+\s*$/, '').trim();
     const parts = addr.split(',');
     const when = tab === 'closed' ? 'Closed ' + fmt(d) : tab === 'pending' ? 'Went pending ' + fmt(d) : ago(d);
     return '<a class="card" href="' + esc(r.link) + '" target="_blank" rel="noopener">' +
@@ -219,41 +181,37 @@ function renderBody() {
       '</div><div>' +
         '<div class="price">' + esc(price) + '</div>' +
         '<h2 class="street">' + esc(parts[0].trim()) + '</h2>' +
-        '<div class="locality">' + esc(parts.slice(1).join(',').trim()) + '</div>' +
+        '<div class="locality">' + esc(parts.slice(1).join(',').replace(/\s+/g,' ').trim()) + '</div>' +
       '</div><div class="when">' + esc(when) + '</div></a>';
-  }).join('');
-  $('#content').innerHTML = '<div class="grid">' + cards + '</div>';
+  }).join('') + '</div>';
 }
 
 function renderStatus() {
-  const sources = FEEDS.map(f => (meta[f.key] || {}).source);
-  const anyLive = sources.includes('live');
-  const anyErr = sources.includes('error');
   const dot = $('#dot');
-  dot.className = 'dot' + (anyLive && !anyErr ? ' ok' : anyErr && !anyLive ? ' bad' : '');
-  $('#statusText').textContent = anyLive && !anyErr ? 'live · all four feeds'
-    : anyLive ? 'live · partial'
-    : anyErr ? 'blocked upstream'
-    : 'cached';
-
-  // Diagnostics: proves whether the server-side relay actually got through.
-  const rows = FEEDS.map(f => {
-    const m = meta[f.key] || {};
-    const cls = m.source === 'live' ? 'live' : m.source === 'error' ? 'err' : 'cache';
-    const detail = m.source === 'error' ? esc(m.error)
-      : (m.warning ? esc(m.warning) + ' · serving cache' : (m.age ? m.age + 's old' : 'fetched fresh'));
-    return '<tr><td>' + f.label + '</td><td><span class="tag ' + cls + '">' +
-      esc(m.source || 'pending') + '</span></td><td>' + detail + '</td>' +
-      '<td class="mono">' + (data[f.key] || []).length + ' items</td></tr>';
-  }).join('');
-  $('#diagTable').innerHTML = rows;
-  $('#diag').classList.add('show');
-  $('#sourceLine').textContent = anyLive ? 'Live from kpdd.com via /api/feed' : 'Relayed through /api/feed';
+  if (!loaded) { dot.className = 'dot'; $('#statusText').textContent = 'connecting…'; return; }
+  const n = failed.size;
+  dot.className = 'dot' + (n === 0 ? ' ok' : n === FEEDS.length ? ' bad' : '');
+  $('#statusText').textContent = n === 0 ? 'live · updated just now'
+    : n === FEEDS.length ? 'feeds unreachable'
+    : 'live · ' + n + ' feed' + (n > 1 ? 's' : '') + ' unreachable';
 }
 
 async function loadAll() {
-  $('#statusText').textContent = 'fetching…';
-  await Promise.all(FEEDS.map(f => loadFeed(f.key)));
+  failed.clear();
+  await Promise.all(FEEDS.map(async f => {
+    try {
+      const res = await fetch(BASE + f.file, { cache: 'no-store' });
+      if (!res.ok) { failed.add(f.key); return; }
+      const items = parse(await res.text());
+      if (items === null) { failed.add(f.key); return; }
+      // Newest first; feeds are usually ordered already, but don't rely on it.
+      data[f.key] = items.sort((a, b) => {
+        const x = parseDate(b.date), y = parseDate(a.date);
+        return (x ? x.getTime() : 0) - (y ? y.getTime() : 0);
+      });
+    } catch (e) { failed.add(f.key); }
+  }));
+  loaded = true;
   renderTabs(); renderBody(); renderStatus();
 }
 

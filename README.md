@@ -1,84 +1,46 @@
-# Morgan Amos RSS — Cloudflare Pages via GitHub
+# Morgan Amos — Listings &amp; Reviews
 
-Same relay as the Netlify test, moved to Cloudflare. Netlify returned **403 on all four
-feeds** because Netlify Functions run on AWS Lambda and kpdd.com's Cloudflare rules
-reject those datacenter IPs outright. Cloudflare Pages Functions run on Cloudflare's own
-network, which is scored differently against a Cloudflare-protected origin.
+KPDD added `Access-Control-Allow-Origin` to the `.rss` routes, so this is now a **single
+static HTML file**. It fetches the four feeds straight from the browser — no relay, no
+Cloudflare Function, no server code, nothing to maintain.
 
-No build step, no dependencies, no config file. The folder layout *is* the config.
+Verified July 30, 2026: all four feeds return 200 with valid RSS on a direct browser fetch.
 
-## 1. Push to GitHub
+## Deploy to Cloudflare Pages
 
-Create a new repo (private is fine), then from inside this folder:
+Push `index.html` to your repo (at the repo root), then:
 
-```
-git init
-git add .
-git commit -m "Morgan Amos RSS relay"
-git branch -M main
-git remote add origin https://github.com/YOUR-USER/YOUR-REPO.git
-git push -u origin main
-```
+1. dash.cloudflare.com → Workers & Pages → **Create** → **Pages** → Connect to Git
+2. Framework preset **None**, build command **blank**, output directory `/`
+3. Save and Deploy
 
-Or just drag these files into a new repo via github.com's web upload — there's nothing
-here that needs a local git client.
+That's it. There's no `functions/` folder anymore — the earlier relay is deleted because
+it's no longer needed.
 
-## 2. Connect it to Cloudflare Pages
+## Embedding on the main site
 
-1. **dash.cloudflare.com** → Workers & Pages → **Create** → **Pages** tab → **Connect to Git**
-2. Authorize GitHub, pick the repo.
-3. Build settings — leave everything empty:
-   - Framework preset: **None**
-   - Build command: *(blank)*
-   - Build output directory: `/`
-4. **Save and Deploy.**
+Two options:
 
-Cloudflare auto-detects `functions/api/feed.js` and wires it to `/api/feed`. Every push
-to `main` redeploys.
+- **Copy it in.** Lift the `<style>`, the markup between `<header>` and `</footer>`, and
+  the `<script>` into your existing page. It has no dependencies beyond the Google Fonts
+  link, and no build step.
+- **iframe it.** Point an iframe at the Pages URL (or a subdomain like
+  `listings.morganamos.com` via Pages → Custom domains). Simplest if the main site is
+  WordPress or a builder you'd rather not hand-edit.
 
-## 3. Test the endpoint directly
+## How it behaves
 
-Before even looking at the page, hit the function in your browser:
+- Four tabs — Active, Pending, Closed, Reviews — with live item counts.
+- Refreshes every 10 minutes, plus a manual Refresh button.
+- Status dot: green = all four live, amber = partial, red = unreachable.
+- Empty feeds show an honest per-tab message (pending is currently empty — that's the
+  real feed state, not an error).
+- Listings without a photo show a striped placeholder rather than a broken image.
 
-```
-https://YOUR-PROJECT.pages.dev/api/feed?feed=active
-```
+## Feed field notes
 
-- **RSS XML appears** → it works. Open `https://YOUR-PROJECT.pages.dev` and the board
-  is live with all four feeds.
-- **JSON with `"error": "upstream_403"`** → Cloudflare's own network is blocked too.
-  You've exhausted your side of the problem; go to step 4.
-
-The board's diagnostics panel shows the same per-feed status: **live** (green), **cache**
-(amber), **error** (red).
-
-## 4. If it's still 403 — send this to KPDD
-
-> Hi — I'm syndicating my agent RSS feeds onto my own website:
-> https://kpdd.com/agents/morganamos/active.rss (plus pending, closed, reviews).
->
-> The feeds are valid and load fine in a browser, but they can't be consumed
-> programmatically. Two things block it:
->
-> 1. The `.rss` routes don't send an `Access-Control-Allow-Origin` header, so a browser
->    can't read them cross-origin from my domain.
-> 2. Cloudflare returns **403** to server-side requests from cloud hosting — I've tested
->    from both AWS (Netlify) and Cloudflare's own network.
->
-> Could you add `Access-Control-Allow-Origin: *` to the `.rss` routes, or a Cloudflare
-> WAF skip rule for those paths? These feeds exist for syndication, so I assume the block
-> is unintended. Happy to provide my domain or IP to allow-list if that's easier.
-
-The CORS header is the better outcome — it removes the need for any relay at all.
-
-## Files
-
-- `index.html` — the board. Plain HTML/CSS/JS, fetches `/api/feed?feed=…`.
-- `functions/api/feed.js` — the relay. Browser headers, 10-min edge cache, challenge
-  detection; never caches or parses an HTML challenge page.
-
-## Custom domain
-
-Pages project → **Custom domains** → add e.g. `listings.yourdomain.com`. If you later
-embed this on your main site, an iframe pointing at that subdomain is the simplest path;
-otherwise copy `index.html`'s markup in and keep `/api/feed` reachable from that origin.
+- **active / pending / closed** — `title` is `Address — $Price`; `link`, `pubDate`, and
+  usually an `enclosure` photo. One closed sale has no photo.
+- **reviews** — `title` is `★★★★★ review from Name`, reviewer in `dc:creator`, full text
+  in `description`, no photo. Read `dc:creator` with `getElementsByTagName` — the
+  namespaced tag won't match a plain `querySelector`.
